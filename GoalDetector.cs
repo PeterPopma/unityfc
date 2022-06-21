@@ -4,7 +4,12 @@ using UnityEngine;
 
 public class GoalDetector : MonoBehaviour
 {
-    [SerializeField] private Player scriptPlayer;
+    [SerializeField] private Game scriptGame;
+
+    public void Awake()
+    {
+        scriptGame = GameObject.Find("Scripts").GetComponent<Game>();
+    }
 
     public void OnTriggerEnter(Collider other)
     {
@@ -12,11 +17,11 @@ public class GoalDetector : MonoBehaviour
         {
             if (name.Equals("GoalDetector1"))
             {
-                scriptPlayer.IncreaseMyScore();
+                scriptGame.ScoreGoal(0);
             }
             else
             {
-                scriptPlayer.IncreaseOtherScore();
+                scriptGame.ScoreGoal(1);
             }
         }
     }
