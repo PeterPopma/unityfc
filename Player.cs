@@ -5,11 +5,13 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 public class Player : MonoBehaviour
 {
+    int number;
     private const int LAYER_SHOOT = 1;
-    private Game scriptGame;
+    private const int LAYER_CHEER = 2;
     private Player fellowPlayer;
     private Ball scriptBall;
     private Rigidbody rigidbodyBall;
@@ -18,21 +20,22 @@ public class Player : MonoBehaviour
     private Transform playerBallPosition;
     private Transform playerCameraRoot;
     private Vector3 initialPosition;
-    private StarterAssetsInputs starterAssetsInputs;
     private Animator animator;
     private AudioSource soundDribble;
     private AudioSource soundShoot;
     private AudioSource soundSteal;
     private float distanceSinceLastDribble;
-    private bool stickBallToPlayer;
+    private bool hasBall;
     private float timeShot;
     private float stealDelay;       // after the player has lost the ball, he cannot steal it back for some time
+    private float cheering;
     private float updateTime;
     private Team team;
     private bool takeFreeKick;
     private bool takeThrowIn;
+    private float shootingPower;
 
-    public bool StickBallToPlayer { get => stickBallToPlayer; set => stickBallToPlayer = value; }
+    public bool HasBall { get => hasBall; set => hasBall = value; }
     public Transform PlayerBallPosition { get => playerBallPosition; set => playerBallPosition = value; }
     public Transform PlayerCameraRoot { get => playerCameraRoot; set => playerCameraRoot = value; }
     public Team Team { get => team; set => team = value; }
@@ -40,6 +43,9 @@ public class Player : MonoBehaviour
     public Vector3 InitialPosition { get => initialPosition; set => initialPosition = value; }
     public bool TakeFreeKick { get => takeFreeKick; set => takeFreeKick = value; }
     public bool TakeThrowIn { get => takeThrowIn; set => takeThrowIn = value; }
+    public int Number { get => number; set => number = value; }
+    public PlayerInput PlayerInput { get => playerInput; set => playerInput = value; }
+    public float ShootingPower { get => shootingPower; set => shootingPower = value; }
 
     void Awake()
     {
@@ -48,8 +54,6 @@ public class Player : MonoBehaviour
         soundDribble = GameObject.Find("Sound/dribble").GetComponent<AudioSource>();
         soundShoot = GameObject.Find("Sound/shoot").GetComponent<AudioSource>();
         soundSteal = GameObject.Find("Sound/woosh").GetComponent<AudioSource>();
-        scriptGame = GameObject.Find("Scripts").GetComponent<Game>();
-        starterAssetsInputs = GetComponent<StarterAssetsInputs>();
         animator = GetComponent<Animator>();
         PlayerBallPosition = transform.Find("BallPosition");
         rigidbodyBall = transformBall.gameObject.GetComponent<Rigidbody>();
@@ -61,6 +65,15 @@ public class Player : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (cheering > 0)
+        {
+            cheering -= Time.deltaTime;
+        }
+        else
+        {
+            animator.SetLayerWeight(LAYER_CHEER, Mathf.Lerp(animator.GetLayerWeight(LAYER_CHEER), 0f, Time.deltaTime * 10f));
+        }
+
         if (stealDelay > 0) {
             stealDelay -= Time.deltaTime;
         }
@@ -71,51 +84,20 @@ public class Player : MonoBehaviour
             updateTime = 0f;
         }
 
-        if (StickBallToPlayer)
+        if (HasBall)
         {
-            transformBall.position = PlayerBallPosition.position;
-            transformBall.Rotate(new Vector3(transform.right.x, 0, transform.right.z), scriptBall.Speed * 0.8f, Space.World);
-            distanceSinceLastDribble += scriptBall.Speed * Time.deltaTime;
-            if (distanceSinceLastDribble > 3)
-            {
-                soundDribble.Play();
-                distanceSinceLastDribble = 0;
-            }
+            DribbleWithBall();
         }
-        else if (scriptBall.PassDestinationPlayer != fellowPlayer && timeShot == 0 && stealDelay<=0)
+        else if (Game.Instance.PassDestinationPlayer != fellowPlayer && timeShot == 0 && stealDelay <= 0)
         {
-            float distanceToPlayer = Vector3.Distance(transformBall.position, PlayerBallPosition.position);
-            if (distanceToPlayer < 0.6)
-            {
-                soundSteal.Play();
-                scriptGame.SetPlayerWithBall(this);
-                StickBallToPlayer = true;
-                scriptBall.TakeBall(this);
-            }
-        }
-        if (starterAssetsInputs!=null && starterAssetsInputs.pass)
-        {
-            starterAssetsInputs.pass = false;
-            Pass();
-        }
-
-        if (starterAssetsInputs != null && starterAssetsInputs.shoot)
-        {
-            starterAssetsInputs.shoot = false;
-            Shoot();
+            CheckTakeBall();
         }
         if (timeShot > 0)
         {
             // shoot ball
-            if (StickBallToPlayer/* && Time.time - timeShot > 0.2*/)
+            if (HasBall/* && Time.time - timeShot > 0.2*/)
             {
-                soundShoot.Play();
-                scriptBall.BallOwnerPlayer = null;
-                scriptGame.SetPlayerWithBall(null);
-                StickBallToPlayer = false;
-                Vector3 shootdirection = transform.forward;
-                shootdirection.y += 0.3f;
-                rigidbodyBall.AddForce(shootdirection * 20f, ForceMode.Impulse);
+                TakeShot();
             }
             // finished kicking animation
             if (Time.time - timeShot > 0.5)
@@ -129,15 +111,51 @@ public class Player : MonoBehaviour
         }
     }
 
-    public void LooseBall()
+    private void CheckTakeBall()
     {
-        stealDelay = 2.0f;
-        StickBallToPlayer = false;
+        float distanceToBall = Vector3.Distance(transformBall.position, PlayerBallPosition.position);
+        if (distanceToBall < 0.6)
+        {
+            if (Game.Instance.PlayerWithBall != null)
+            {
+                soundSteal.Play();
+                Game.Instance.PlayerWithBall.LooseBall(true);
+            }
+            Game.Instance.SetPlayerWithBall(this);
+        }
+    }
+
+    private void DribbleWithBall()
+    {
+        transformBall.position = PlayerBallPosition.position;
+        distanceSinceLastDribble += scriptBall.Speed.magnitude * Time.deltaTime;
+        if (distanceSinceLastDribble > 3)
+        {
+            soundDribble.Play();
+            distanceSinceLastDribble = 0;
+        }
+    }
+
+    public void LooseBall(bool stolen = false)
+    {
+        if (stolen)
+        {
+            stealDelay = 2.0f;
+        }
+        HasBall = false;
+        shootingPower = 0;
+        Game.Instance.RemovePowerBar();
+    }
+
+    public void ScoreGoal()
+    {
+        cheering = 2.0f;
+        animator.SetLayerWeight(LAYER_CHEER, 1f);
     }
 
     public void Shoot()
     {
-        if (StickBallToPlayer)
+        if (HasBall)
         {
             timeShot = Time.time;
             animator.Play("Shoot", LAYER_SHOOT, 0f);
@@ -145,25 +163,34 @@ public class Player : MonoBehaviour
         }
     }
 
+    private void TakeShot()
+    {
+        soundShoot.Play();
+        Game.Instance.SetPlayerWithBall(null);
+        Vector3 shootdirection = transform.forward;
+        shootdirection.y += 0.2f;
+        rigidbodyBall.AddForce(shootdirection * (10 + shootingPower * 20f), ForceMode.Impulse);
+        LooseBall();
+    }
+
     public void Pass()
     {
-        if (StickBallToPlayer && scriptBall.PassDestinationPlayer == null)
+        if (HasBall && Game.Instance.PassDestinationPlayer == null)
         {
             transform.LookAt(fellowPlayer.transform.position);
             timeShot = Time.time;
             soundShoot.Play();
-            StickBallToPlayer = false;
+            LooseBall();
             animator.Play("Shoot", LAYER_SHOOT, 0f);
             animator.SetLayerWeight(LAYER_SHOOT, 1f);
-            playerInput.enabled = false;
-            fellowPlayer.Activate();
+            scriptBall.Pass(this);
         }
     }
 
     public void Activate()
     {
+        Game.Instance.ActiveHumanPlayer = this;
         playerInput.enabled = true;
-        scriptBall.Pass(this);
     }
 
     public void SetPosition(Vector3 position)
@@ -171,7 +198,7 @@ public class Player : MonoBehaviour
         if (Team.IsHuman)
         {
             GetComponent<CharacterController>().enabled = false;
-            GetComponent<CharacterController>().transform.position = position;
+            transform.position = position;
             GetComponent<CharacterController>().enabled = true;
         }
         else

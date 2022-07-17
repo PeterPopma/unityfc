@@ -5,31 +5,36 @@ using UnityEngine;
 
 public class AIPlayer : MonoBehaviour
 {
-    [SerializeField] private int playMode;
+    [SerializeField] private float movementSpeed = 4.0f;
+    [SerializeField] private float shootingPower = 0.7f;
     private Transform transformBall;
-    private Game scriptGame;
     private Player scriptPlayer;
-    private Ball scriptBall;
     private Animator animator;
     private Transform playerBallPosition;
-    private Vector3 targetGoalLocation;
-
-    // Start is called before the first frame update
+    private Vector3 targetGoalPosition;
+    private Vector3 ownGoalPosition;
+    private Vector3[] attackTargetLocation = new Vector3[2];
+    
     void Start()
     {
         transformBall = GameObject.Find("Ball").transform;
-        scriptBall = transformBall.GetComponent<Ball>();
         scriptPlayer = GetComponent<Player>();
-        scriptGame = GameObject.Find("Scripts").GetComponent<Game>();
         animator = GetComponent<Animator>();
         playerBallPosition = transform.Find("BallPosition");
-        targetGoalLocation = new Vector3(52.3696518f, 0.5f, -0.219999999f);
+        targetGoalPosition = new Vector3(51.93f, Game.PLAYER_Y_POSITION, 0.24f);
+        ownGoalPosition = new Vector3(-52.37f, Game.PLAYER_Y_POSITION, -0.22f);
+        attackTargetLocation[0] = new Vector3(38f, Game.PLAYER_Y_POSITION, 10f);
+        attackTargetLocation[1] = new Vector3(38f, Game.PLAYER_Y_POSITION, -10f);
     }
 
-    // Update is called once per frame
     void Update()
     {
-        if (scriptGame.TeamWithBall != scriptPlayer.Team.Number)
+        if (Game.Instance.WaitingForKickOff)
+        {
+            return;
+        }
+
+        if (Game.Instance.TeamWithBall != scriptPlayer.Team.Number)
         {
             DefendMode();
         }
@@ -43,16 +48,22 @@ public class AIPlayer : MonoBehaviour
     private void AttackMode()
     {
         // move to target goal
-        transform.LookAt(targetGoalLocation);
-        Vector3 movedirection = targetGoalLocation - playerBallPosition.position;
+        Vector3 movedirection = attackTargetLocation[scriptPlayer.Number] - new Vector3(playerBallPosition.position.x, 0, playerBallPosition.position.z);
         float distanceToGoal = movedirection.magnitude;
-        Vector3 moveSpeed = new Vector3(movedirection.normalized.x * 4f * Time.deltaTime, 0, movedirection.normalized.z * 4f * Time.deltaTime);
+        float speed = movementSpeed;
+        if (scriptPlayer.HasBall)
+        {
+            speed *= Game.HAVING_BALL_SLOWDOWN_FACTOR;
+        }
+        Vector3 moveSpeed = new Vector3(movedirection.normalized.x * speed * Time.deltaTime, 0, movedirection.normalized.z * speed * Time.deltaTime);
         transform.position += moveSpeed;
-        animator.SetFloat("Speed", 5);
+        transform.LookAt(targetGoalPosition);
+        animator.SetFloat("Speed", speed);
         animator.SetFloat("MotionSpeed", 1);
         // shoot
-        if (distanceToGoal < 15)
+        if (scriptPlayer.HasBall && distanceToGoal < 15)
         {
+            scriptPlayer.ShootingPower = shootingPower;
             animator.SetFloat("Speed", 0);
             animator.SetFloat("MotionSpeed", 0);
             scriptPlayer.Shoot();
@@ -63,23 +74,46 @@ public class AIPlayer : MonoBehaviour
     // player farthest from ball moves between goal and player closest to goal
     private void DefendMode()
     {
-        if (scriptGame.PlayerClosestToBall(1) == scriptPlayer)
+        if (Game.Instance.PlayerClosestToBall(1) == scriptPlayer)
         {
             MoveToBall();
         }
         else
         {
-            MoveToBall();
+            MoveToBetweenGoalAndPlayerClosestToGoal();
         }
+    }
+
+    private void MoveToBetweenGoalAndPlayerClosestToGoal()
+    {
+        Vector3 mostDangerousEnemyPlayer = Game.Instance.PlayerClosestToLocation(0, ownGoalPosition).transform.position;
+        Vector3 targetLocation = Vector3.Lerp(ownGoalPosition, mostDangerousEnemyPlayer, 0.5f);
+        Vector3 movedirection = targetLocation - playerBallPosition.position;
+        Vector3 moveSpeed = new Vector3(movedirection.normalized.x * movementSpeed * Time.deltaTime, 0, movedirection.normalized.z * movementSpeed * Time.deltaTime);
+        transform.position += moveSpeed;
+
+        if (moveSpeed.magnitude > 0.005)
+        {
+            transform.LookAt(targetLocation);
+        }
+        else
+        {
+            transform.LookAt(mostDangerousEnemyPlayer);
+        }
+
+        animator.SetFloat("Speed", moveSpeed.magnitude * 200);
+        animator.SetFloat("MotionSpeed", 1);
     }
 
     private void MoveToBall()
     {
-        transform.LookAt(transformBall.position);
+        Vector3 lookAtPosition = transformBall.position;
+        lookAtPosition.y = transform.position.y;
+        transform.LookAt(lookAtPosition);
         Vector3 movedirection = transformBall.position - playerBallPosition.position;
-        Vector3 moveSpeed = new Vector3(movedirection.normalized.x * 5f * Time.deltaTime, 0, movedirection.normalized.z * 5f * Time.deltaTime);
+        Vector3 moveSpeed = new Vector3(movedirection.normalized.x * movementSpeed * Time.deltaTime, 0, movedirection.normalized.z * movementSpeed * Time.deltaTime);
         transform.position += moveSpeed;
-        animator.SetFloat("Speed", 8);
+        animator.SetFloat("Speed", moveSpeed.magnitude * 200);
         animator.SetFloat("MotionSpeed", 1);
     }
 }

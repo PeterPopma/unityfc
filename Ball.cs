@@ -6,29 +6,25 @@ using UnityEngine;
 
 public class Ball : MonoBehaviour
 {
-    private Player passDestinationPlayer;
-    private Player ballOwnerPlayer;
-    private float speed;
     private float ballOutOfFieldTimeOut;
     private bool isThrowIn;
+    private Vector3 speed;
     private Vector3 ballOutOfFieldposition;
-    Vector2 previousPositon;
-    private Game scriptGame;
-    private Rigidbody rigidbody;
+    private Vector3 previousPosition;
+    private new Rigidbody rigidbody;
     private AudioSource soundWhistle;
+    private const float BALL_GROUND_POSITION_Y = 0.72f;
+    private const float PASSING_SPEED = 25f;
 
-    public Player PassDestinationPlayer { get => passDestinationPlayer; set => passDestinationPlayer = value; }
-    public Player BallOwnerPlayer { get => ballOwnerPlayer; set => ballOwnerPlayer = value; }
-    public float Speed { get => speed; }
     public float BallOutOfFieldTimeOut { get => ballOutOfFieldTimeOut; set => ballOutOfFieldTimeOut = value; }
     public Rigidbody Rigidbody { get => rigidbody; set => rigidbody = value; }
+    public Vector3 Speed { get => speed; set => speed = value; }
 
     private float timePassedBall;
     private CinemachineVirtualCamera playerFollowCamera;
 
     private void Awake()
     {
-        scriptGame = GameObject.Find("Scripts").GetComponent<Game>();
         playerFollowCamera = GameObject.Find("PlayerFollowCamera").GetComponent<CinemachineVirtualCamera>();
         soundWhistle = GameObject.Find("Sound/whistle").GetComponent<AudioSource>();
         rigidbody = GetComponent<Rigidbody>();
@@ -37,30 +33,33 @@ public class Ball : MonoBehaviour
     public void Pass(Player player)
     {
         timePassedBall = Time.time;
-        passDestinationPlayer = player;
+        Game.Instance.PassDestinationPlayer = player.FellowPlayer;
     }
 
-    public void TakeBall(Player newBallOwner)
+    public void PutOnGround()
     {
-        if (ballOwnerPlayer != null)
-        {
-            ballOwnerPlayer.LooseBall();
-        }
-        ballOwnerPlayer = newBallOwner;
+        transform.position = new Vector3(transform.position.x, BALL_GROUND_POSITION_Y, transform.position.z);
+    }
+    public void PutOnCenterSpot()
+    {
+        transform.position = new Vector3(-0.1f, BALL_GROUND_POSITION_Y, -0.049f);
     }
 
-    private void BallOutOfField()
+    private void TakeThrowIn()
     {
-        if (scriptGame.PlayerWithBall != null)
+        if (Game.Instance.PlayerWithBall != null)
         {
-            scriptGame.PlayerWithBall.StickBallToPlayer = false;
-            scriptGame.SetPlayerWithBall(null);
+            Game.Instance.PlayerWithBall.HasBall = false;
+            Game.Instance.SetPlayerWithBall(null);
         }
         transform.position = ballOutOfFieldposition;
         rigidbody.velocity = Vector3.zero;
         rigidbody.angularVelocity = Vector3.zero;
-        Player player = scriptGame.GetPlayerToTrowIn();
-        player.SetPosition(ballOutOfFieldposition);
+        Player player = Game.Instance.GetPlayerToThrowIn();
+        player.SetPosition(new Vector3(ballOutOfFieldposition.x, player.transform.position.y, ballOutOfFieldposition.z));
+        // Look in the directon of the field. Otherwise the ball will be out of field again.
+        player.transform.LookAt(Game.Instance.KickOffPosition);
+        Game.Instance.SetPlayerWithBall(player);
         if (isThrowIn)
         {
             player.TakeThrowIn = true;
@@ -70,70 +69,70 @@ public class Ball : MonoBehaviour
             player.TakeFreeKick = true;
         }
         // move players that are too close
-        scriptGame.SetMinimumDistanceOtherPlayers(player);
+        Game.Instance.SetMinimumDistanceOtherPlayers(player);
     }
 
     private void CheckBallOutOfField()
     {
         // ball out of field
-        if (transform.position.z < -25)
-        {
-            soundWhistle.Play();
-            isThrowIn = true;
-            ballOutOfFieldTimeOut = 0.5f;
-            ballOutOfFieldposition = new Vector3(transform.position.x, 0.772f, -25);
-        }
-        if (transform.position.z > 25)
+        if (transform.position.z < Game.FIELD_BOUNDARY_LOWER_Z)
         {
             soundWhistle.Play();
             isThrowIn = true;
             ballOutOfFieldTimeOut = 1.0f;
-            ballOutOfFieldposition = new Vector3(transform.position.x, 0.772f, 25);
+            ballOutOfFieldposition = new Vector3(transform.position.x, BALL_GROUND_POSITION_Y, -25);
+        }
+        if (transform.position.z > Game.FIELD_BOUNDARY_UPPER_Z)
+        {
+            soundWhistle.Play();
+            isThrowIn = true;
+            ballOutOfFieldTimeOut = 1.0f;
+            ballOutOfFieldposition = new Vector3(transform.position.x, BALL_GROUND_POSITION_Y, 25);
         }
 
-        if (transform.position.x < -52.6f)
+        if (transform.position.x < Game.FIELD_BOUNDARY_LOWER_X)
         {
             soundWhistle.Play();
             isThrowIn = false;
             ballOutOfFieldTimeOut = 1.0f;
-            if (scriptGame.TeamLastTouched == 0)
+            if (Game.Instance.TeamLastTouched == 0)
             {
                 // goal kick
-                ballOutOfFieldposition = new Vector3(-46.7999992f, 0.772000015f, -4.88999987f);
+                ballOutOfFieldposition = new Vector3(-46.8f, BALL_GROUND_POSITION_Y, -4.89f);
             }
             else
             {
                 // corner
                 if (transform.position.z > 0)
                 {
-                    ballOutOfFieldposition = new Vector3(-52.6f, 0.772f, 25);
+                    ballOutOfFieldposition = new Vector3(-52.6f, BALL_GROUND_POSITION_Y, 25);
                 }
                 else
                 {
-                    ballOutOfFieldposition = new Vector3(-52.6f, 0.772f, -25);
+                    ballOutOfFieldposition = new Vector3(-52.6f, BALL_GROUND_POSITION_Y, -25);
                 }
             }
         }
-        if (transform.position.x > 52.3f)
+        if (transform.position.x > Game.FIELD_BOUNDARY_UPPER_X)
         {
             soundWhistle.Play();
             isThrowIn = false;
             ballOutOfFieldTimeOut = 1.0f;
-            if (scriptGame.TeamLastTouched == 1)
+            if (Game.Instance.TeamLastTouched == 1)
             {
                 // goal kick
-                ballOutOfFieldposition = new Vector3(46.5800018f, 0.772000015f, 5.28999996f);
+                ballOutOfFieldposition = new Vector3(46.58f, BALL_GROUND_POSITION_Y, 5.29f);
             }
             else
             {
                 // corner
                 if (transform.position.z > 0)
                 {
-                    ballOutOfFieldposition = new Vector3(52.3f, 0.772f, 25);
+                    ballOutOfFieldposition = new Vector3(52.3f, BALL_GROUND_POSITION_Y, 25);
                 }
                 else
                 {
-                    ballOutOfFieldposition = new Vector3(52.3f, 0.772f, -25);
+                    ballOutOfFieldposition = new Vector3(52.3f, BALL_GROUND_POSITION_Y, -25);
                 }
             }
         }
@@ -142,12 +141,17 @@ public class Ball : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        if (transform.position.y<0)
+        {
+            int error = 1;
+        }
+
         if (ballOutOfFieldTimeOut>0)
         {
             ballOutOfFieldTimeOut -= Time.deltaTime;
-            if(ballOutOfFieldTimeOut <=0 )
+            if (ballOutOfFieldTimeOut <=0 && !Game.Instance.WaitingForKickOff)
             {
-                BallOutOfField();
+                TakeThrowIn();
             }
         }
         else
@@ -155,35 +159,49 @@ public class Ball : MonoBehaviour
             CheckBallOutOfField();
         }
 
+        if (Game.Instance.PassDestinationPlayer != null)
+        {
+            PassBall();
+        }
+        else if (Game.Instance.PlayerWithBall != null)
+        {
+            transform.position = Game.Instance.PlayerWithBall.PlayerBallPosition.position;
+        }
+
+        UpdateBallSpeedAndRotation();
+    }
+
+    private void UpdateBallSpeedAndRotation()
+    {
         if (Time.deltaTime > 0)
         {
-            speed = (float)(Math.Sqrt(Math.Pow(transform.position.x - previousPositon.x, 2) + Math.Pow(transform.position.z - previousPositon.y, 2)) / Time.deltaTime);
+            speed = new Vector3((transform.position.x - previousPosition.x) / Time.deltaTime, 0, (transform.position.z - previousPosition.z) / Time.deltaTime);
         }
+        previousPosition.x = transform.position.x;
+        previousPosition.z = transform.position.z;
+        Vector3 rotationAxis = Vector3.Cross(speed.normalized, Vector3.up);
+        transform.Rotate(rotationAxis, -speed.magnitude * 1.8f, Space.World);
+    }
 
-        previousPositon.x = transform.position.x;
-        previousPositon.y = transform.position.z;
-
-        if (passDestinationPlayer != null)
+    private void PassBall()
+    {
+        if (Time.time - timePassedBall > 0.2 && playerFollowCamera.Follow != Game.Instance.PassDestinationPlayer.PlayerCameraRoot)
         {
-            if (Time.time - timePassedBall > 0.2 && playerFollowCamera.Follow != passDestinationPlayer.PlayerCameraRoot)
-            {
-                playerFollowCamera.Follow = passDestinationPlayer.PlayerCameraRoot;
-            }
-
-            Vector3 movedirection = passDestinationPlayer.PlayerBallPosition.position - transform.position;
-            if (movedirection.magnitude<1f)
-            {
-                // pass arrived
-                transform.position = passDestinationPlayer.PlayerBallPosition.position;
-                passDestinationPlayer.StickBallToPlayer = true;
-                scriptGame.SetPlayerWithBall(passDestinationPlayer);
-                ballOwnerPlayer = passDestinationPlayer;
-                passDestinationPlayer = null;
-            }
-            movedirection.Normalize();
-            transform.position += movedirection * 25f * Time.deltaTime;
-            transform.Rotate(new Vector3(movedirection.x, 0, movedirection.z), 1000f * Time.deltaTime, Space.Self);
+            // switch player
+            Game.Instance.PassDestinationPlayer.FellowPlayer.PlayerInput.enabled = false;
+            Game.Instance.PassDestinationPlayer.Activate();
+            playerFollowCamera.Follow = Game.Instance.PassDestinationPlayer.PlayerCameraRoot;
         }
+
+        Vector3 movedirection = Game.Instance.PassDestinationPlayer.PlayerBallPosition.position - transform.position;
+        if (movedirection.magnitude < 1f)
+        {
+            // pass arrived
+            transform.position = Game.Instance.PassDestinationPlayer.PlayerBallPosition.position;
+            Game.Instance.SetPlayerWithBall(Game.Instance.PassDestinationPlayer);
+        }
+        movedirection.Normalize();
+        transform.position += movedirection * PASSING_SPEED * Time.deltaTime;
     }
 
 }

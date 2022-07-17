@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class Spotlight : MonoBehaviour
 {
-    Light light;
+    new Light light;
 
     // Start is called before the first frame update
     void Start()
